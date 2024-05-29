@@ -1,0 +1,212 @@
+package com.example.jobapplicant;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class JobApplicantApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(JobApplicantApplication.class, args);
+    }
+}
+package com.example.jobapplicant.model;
+
+import javax.persistence.Entity;
+import javax.persistence.GeneratedValue;
+import javax.persistence.GenerationType;
+import javax.persistence.Id;
+import javax.validation.constraints.Email;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Pattern;
+
+@Entity
+public class JobApplicant {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @NotBlank(message = "Name is required")
+    private String name;
+
+    @Email(message = "Invalid email format")
+    @NotBlank(message = "Email is required")
+    private String email;
+
+    @NotBlank(message = "Phone is required")
+    @Pattern(regexp = "^\\+?[0-9. ()-]{7,25}$", message = "Invalid phone number")
+    private String phone;
+
+    private String resume;
+
+    // Getters and Setters
+    // ...
+}
+package com.example.jobapplicant.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import com.example.jobapplicant.model.JobApplicant;
+
+public interface JobApplicantRepository extends JpaRepository<JobApplicant, Long> {
+}
+package com.example.jobapplicant.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import com.example.jobapplicant.model.JobApplicant;
+import com.example.jobapplicant.repository.JobApplicantRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class JobApplicantService {
+
+    @Autowired
+    private JobApplicantRepository repository;
+
+    public List<JobApplicant> getAllApplicants() {
+        return repository.findAll();
+    }
+
+    public Optional<JobApplicant> getApplicantById(Long id) {
+        return repository.findById(id);
+    }
+
+    public JobApplicant createApplicant(JobApplicant applicant) {
+        return repository.save(applicant);
+    }
+
+    public JobApplicant updateApplicant(Long id, JobApplicant applicantDetails) {
+        JobApplicant existingApplicant = repository.findById(id).orElseThrow(() -> new RuntimeException("Applicant not found"));
+        existingApplicant.setName(applicantDetails.getName());
+        existingApplicant.setEmail(applicantDetails.getEmail());
+        existingApplicant.setPhone(applicantDetails.getPhone());
+        existingApplicant.setResume(applicantDetails.getResume());
+        return repository.save(existingApplicant);
+    }
+
+    public void deleteApplicant(Long id) {
+        repository.deleteById(id);
+    }
+}
+package com.example.jobapplicant.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import com.example.jobapplicant.model.JobApplicant;
+import com.example.jobapplicant.service.JobApplicantService;
+
+import javax.validation.Valid;
+import java.util.List;
+import java.util.Optional;
+
+@RestController
+@RequestMapping("/api/applicants")
+public class JobApplicantController {
+
+    @Autowired
+    private JobApplicantService service;
+
+    @GetMapping
+    public List<JobApplicant> getAllApplicants() {
+        return service.getAllApplicants();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<JobApplicant> getApplicantById(@PathVariable Long id) {
+        Optional<JobApplicant> applicant = service.getApplicantById(id);
+        return applicant.map(ResponseEntity::ok).orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public ResponseEntity<JobApplicant> createApplicant(@Valid @RequestBody JobApplicant applicant) {
+        JobApplicant createdApplicant = service.createApplicant(applicant);
+        return ResponseEntity.status(201).body(createdApplicant);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<JobApplicant> updateApplicant(@PathVariable Long id, @Valid @RequestBody JobApplicant applicantDetails) {
+        JobApplicant updatedApplicant = service.updateApplicant(id, applicantDetails);
+        return ResponseEntity.ok(updatedApplicant);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteApplicant(@PathVariable Long id) {
+        service.deleteApplicant(id);
+        return ResponseEntity.noContent().build();
+    }
+}
+package com.example.jobapplicant.exception;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<Map<String, String>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> errors = ex.getBindingResult().getFieldErrors().stream()
+                .collect(Collectors.toMap(
+                        fieldError -> fieldError.getField(),
+                        fieldError -> fieldError.getDefaultMessage()
+                ));
+        return new ResponseEntity<>(errors, HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ResponseEntity<Map<String, String>> handleRuntimeException(RuntimeException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+}
+<dependency>
+    <groupId>io.springfox</groupId>
+    <artifactId>springfox-boot-starter</artifactId>
+    <version>3.0.0</version>
+</dependency>
+package com.example.jobapplicant;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import springfox.documentation.builders.PathSelectors;
+import springfox.documentation.builders.RequestHandlerSelectors;
+import springfox.documentation.spi.DocumentationType;
+import springfox.documentation.spring.web.plugins.Docket;
+import springfox.documentation.swagger2.annotations.EnableSwagger2;
+
+@Configuration
+@EnableSwagger2
+public class SwaggerConfig {
+
+    @Bean
+    public Docket api() {
+        return new Docket(DocumentationType.SWAGGER_2)
+                .select()
+                .apis(RequestHandlerSelectors.basePackage("com.example.jobapplicant.controller"))
+                .paths(PathSelectors.any())
+                .build();
+    }
+}
+# application.properties
+
+spring.datasource.url=jdbc:h2:mem:testdb
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.h2.console.enabled=true
+spring.jpa.hibernate.ddl-auto=update
